@@ -1,0 +1,369 @@
+#!/home/youssef15015/anaconda2/bin/python2
+## Imported libaries for useful coding tools.
+import os
+import numpy as np
+import random
+import math
+from ROOT  import TFile, TH1F,TH2F, TCanvas, gROOT
+import ROOT
+from math import ceil, floor
+#Global variables.
+global name
+global canvas
+block=True
+
+
+## Code Functions.
+## String to float converters.
+def four_digit_strings_to_floats(input_string):
+    #Split the string based on how many "commas(,)" there are.
+    #Split is a method inherent to any string object. 
+    split = input_string.split(",")
+    #Returns a float list of every string that was separated (It assumes that there were four.)
+    return float(split[0]),float(split[1]),float(split[2]),float(split[3])
+
+#Same as above, but for 2 floats.
+def two_digit_strings_to_floats(input_string):
+    split = input_string.split(",")
+    return float(split[0]),float(split[1])
+
+## Function to get histogram bin numbers and boundaries.
+#These are all methods defined for root(tool in different coding language) histograms that are created in a different coding language, but uses
+#a wrapper to acces them.
+def getBoundaries(hist):
+    xbins1 = hist.GetNbinsX()
+    ybins1 = hist.GetNbinsY()
+    xmin1 = hist.GetXaxis().GetXmin()
+    xmax1 = hist.GetXaxis().GetXmax()
+    ymin1 = hist.GetYaxis().GetXmin()
+    ymax1 = hist.GetYaxis().GetXmax()
+    return xbins1,ybins1,xmin1,ymin1,xmax1,ymax1
+
+## Manually change range of histogram:
+## You can also do this interactively.
+def zoom(hist,MSW_MIN,MSW_MAX,MSL_MIN,MSL_MAX):
+      #Uses the above function to retrieve the bins and boundaries.
+      xbins1,ybins1,xmin1,ymin1,xmax1,ymax1 = getBoundaries(hist)
+      #It takes in the new MSW and MSL boundaries to find out what bin number they correspond to if you zoom.
+      #This is necessary, because the inherent root function that zooms needs the bin information.
+      #It uses method of ratios to find the new bin ranges. I.E. New bin = old bin * new axis (msw/msl) value / old axis value 
+      xbins2min = int(round((xbins1*MSW_MIN)/(xmax1-xmin1)))
+      xbins2max = int(round((xbins1*MSW_MAX)/(xmax1-xmin1)))
+      ybins2min = int(round((ybins1*MSL_MIN)/(ymax1-ymin1)))
+      ybins2max = int(round((ybins1*MSL_MAX)/(ymax1-ymin1)))
+      hist.GetXaxis().SetRange(xbins2min,xbins2max)
+      hist.GetYaxis().SetRange(ybins2min,ybins2max)
+
+## Draw zoom layers specified by zoom function above.
+def drawZoom(hist,name,canvas):
+    if not (canvas):
+         #A canvas is just a frame to show you pictures (like the ones we see while the code runs).
+         canvas = TCanvas(name)
+    #Here you input the MSL/MSW boundaries when it asks you. It takes them in as a string. 
+    params_strings = raw_input("type in MSL and MSW boundaries following the format: msw_min,msw_max,msl_min,msl_max as floats: ")
+    #You then assign these variables the values that correspond to the float outputs
+    msw_min,msw_max,msl_min,msl_max = four_digit_strings_to_floats(params_strings)
+    # Condition just incase you right absurd boundaries.
+    if (msw_min > msw_max or msl_min > msl_max):
+        print("Error, min can't be greater than max, moved on to next plot.")
+    #Now we use the zoom function we defined above, and then draw the histogram.
+    else:
+        zoom(hist,msw_min,msw_max,msl_min,msl_max)
+        #Make the histogram show different values in different colors.
+        hist.SetOption("COLZ")
+        #Draw it
+        hist.Draw()
+        #Save your canvas so you can see the pdf later.
+        canvas.Print(output+"/"+name+"_zoomed")
+        #Important!! Notice that you can attatch two separate strings together using the '+' operator.
+
+## Create histogram with new bin sizes.
+def changeBins(hist):
+    xmax2 = 0
+    print_warning = 1
+    name = hist.GetName()
+    params_strings= raw_input('Type in bin multipliers following the format: xmultiplier,ymultiplier as floats: ')
+    xmultiplier,ymultiplier = two_digit_strings_to_floats(params_strings)
+    xbins1,ybins1,xmin1,ymin1,xmax1,ymax1 = getBoundaries(hist)
+
+    new_boundaries = raw_input('Type "yes" to change the boundaries: ')
+    if (new_boundaries == "yes" or new_boundaries == "yes " or new_boundaries == "Yes" or new_boundaries == "Yes " ):
+        new_boundaries = raw_input("Type in MSL and MSW boundaries following the format: min,max as floats: ")
+        xmin2,xmax2 = two_digit_strings_to_floats(new_boundaries)
+        ymin2,ymax2 = xmin2,xmax2
+
+    if (not xmax2):
+        print('No new boundaries selected... ')
+        xmin2,ymin2,xmax2,ymax2 = xmin1,ymin1,xmax1,ymax1
+
+    if (xmax2 != ymax2 or xmin2 != ymin2 ):
+        print('Error, the boundaries must be the same for each axis, using original boundaries...')
+        xmin2,ymin2,xmax2,ymax2 = xmin1,ymin1,xmax1,ymax1
+
+    XBins = xmultiplier*xbins1
+    YBins = ymultiplier*ybins1
+
+    if (int(XBins/(xmax2-xmin2)) != XBins/(xmax2-xmin2) or int(YBins/(ymax2-ymin2)) != YBins/(ymax2-ymin2)):
+        print('Error, please make sure that the number of bins is divisble by the axis scale, using original boundaries...')
+        xmin2,ymin2,xmax2,ymax2 = xmin1,ymin1,xmax1,ymax1
+
+
+    if (int(XBins) != XBins or int(YBins)  != YBins):
+        print ('Error, both X and Y bins must be integars.')
+        hist2 = []
+
+    else:
+        name = name + ":%4.0f,%4.0f" % (XBins,YBins)
+        hist2 = TH2F(name, name ,int(XBins),xmin2,xmax2,int(YBins),ymin2,ymax2)
+        xbin = (xmax1-xmin1)/xbins1
+        ybin = (ymax1-ymin1)/ybins1
+        xaxis = np.arange(xmin1-xbin,xmax1+2*xbin,xbin)
+        yaxis = np.arange(ymin1-ybin,ymax1+2*ybin,ybin)
+        for i in range(0,xbins1+2):
+            for j in range(0,ybins1+2):
+                weight = hist.GetBinContent(i,j)
+                if (weight):
+                    if ( XBins/(xmax2-xmin2) <= xbins1/(xmax1-xmin1) and YBins/(ymax2-ymin2) <= ybins1/(ymax1-ymin1) ):
+                        if (xmin2 <= xaxis[i] <= xmax2 and ymin2 <= yaxis[j] <= ymax2):
+                            for filling in range(int(weight)):  
+                                hist2.Fill(xaxis[i],yaxis[j])
+                    else:
+                        if (print_warning):
+                            print("Warning, artificially increasing counts to fill bins!")
+                            print_warning=0
+                        multiplier = max(xmultiplier,ymultiplier)
+
+                        for filling in range(int(multiplier)*int(weight)):
+                            for iteration in range(int(multiplier)):
+                                x_jump = 0
+                                y_jump = 0
+                                random_x = random.uniform(-1.5,1.5)
+                                random_y = random.uniform(-1.5,1.5)
+                                if (random_x > 0):
+                                    if (random_x > (1+iteration)/multiplier):
+                                        x_jump += 1
+                                if (random_x < 0):
+                                    if (random_x < -(1+iteration)/multiplier):
+                                        x_jump -= 1
+                                for iteration in range(int(multiplier)):
+                                    if (random_y > 0):
+                                        if (random_y > (1+iteration)/multiplier):
+                                            y_jump += 1
+                                    if (random_y < 0):
+                                        if (random_y < -(1+iteration)/multiplier):
+                                            y_jump -= 1
+                                if (i+x_jump < 0 or i+x_jump >= xbins1):
+                                    x_jump=0
+                                if (j+y_jump < 0 or j+y_jump >= ybins1):
+                                    y_jump=0
+                                hist2.Fill(xaxis[int(i+x_jump)],yaxis[int(j+y_jump)],(1.0/(int(multiplier))))               
+    return hist2
+
+## Project Histogram in 1-Dimension across x and y axis.
+def Projection(hist,name,canvas,min,max):
+    global list1D
+    global list1DL
+    #Retrieves the name of the original 2D Histogram
+    name = hist.GetName()
+    #Find the number of bins(boxes) and the boundaries of your MSL,MSW ranges(your axes).
+    xbins1,ybins1,xmin1,ymin1,xmax1,ymax1 = getBoundaries(hist)
+    #These are the new names we will use for the 1D histograms.
+    #You can use the '+' to add two strings with each other.
+    name1 = name + "_1D_MSW"
+    name2 = name + "_1D_MSL" 
+    name3 = name + "_1D_Full_Linear"
+
+    xbins = floor((max-min)/(xmax1-xmin1)*xbins1)-1
+    ybins = floor((max-min)/(ymax1-ymin1)*ybins1)-1
+
+    print("MSW bins: %i" % xbins)
+    print("MSL bins: %i" % ybins)
+    
+    hist1_old = TH1F()
+    hist2_old = TH1F()
+
+    proj1 = hist.ProjectionX()
+    proj2 = hist.ProjectionY()
+
+    proj1.Copy(hist1_old)
+    proj2.Copy(hist2_old)
+    
+
+    
+    hist1 = TH1F(name1, name1 ,int(xbins),min,max)
+    hist2 = TH1F(name2, name2 ,int(ybins),min,max)
+    xbin = (xmax1-xmin1)/xbins1
+    ybin = (ymax1-ymin1)/ybins1
+    xaxis = np.arange(xmin1-xbin,xmax1+2*xbin,xbin)
+    yaxis = np.arange(ymin1-ybin,ymax1+2*ybin,ybin)
+    #I loop over every bin. I cross check all the y-axis bins for every x-axis bin.
+    for i in range(xbins1+2):
+        weight = hist1_old.GetBinContent(i)
+        if (weight):
+            #Check if your value is in between the new min and max values you have chosen.
+               if (min <= xaxis[i] <= max):
+               #Filling can be anything, but it repeats for the length of weight.
+                   for filling in range(int(weight)): 
+                   #The Fill command adds a value to the histogram. 
+                   #Make the same check as before, but for each value now
+                       if (min <= xaxis[i] <= max):
+                           hist1.Fill(xaxis[i])
+
+    for j in range(ybins1+2):
+        weight = hist2_old.GetBinContent(j)
+        if (weight):
+            #Check if your value is in between the new min and max values you have chosen.
+               if (min <= yaxis[j] <= max):
+               #Filling can be anything, but it repeats for the length of weight.
+                   for filling in range(int(weight)): 
+                   #The Fill command adds a value to the histogram. 
+                   #Make the same check as before, but for each value now
+                       if (min <= yaxis[j] <= max): 
+                           hist2.Fill(yaxis[j])
+
+
+    hist3 = hist1 + hist2
+    hist3.SetName(name3)
+    hist3.SetTitle(name3)
+
+    #Finally I draw the histogram so you can see it.
+    #It is also important to place it in the same virtual directory (directory inside the root program), 
+    #to later save the histogram!!
+    canvas.cd(0)
+    hist1.SetDirectory(0)
+    hist2.SetDirectory(0)
+    hist3.SetDirectory(0)
+    hist1.Draw()
+    #Add to list
+    list1D.append(hist1)
+    #Once again, notice that you can attatch two separate strings together using the '+' operator.
+    canvas.Print(output+"/1DHists/"+name1+".pdf")
+    #It now freezes the screen and waits your command to continue.
+    raw_input('Type anything to proceed to MSL distribution: ')
+    hist2.Draw()
+    list1D.append(hist2)
+    canvas.Print(output+"/1DHists/"+name2+".pdf")
+    raw_input('Type anything to proceed to the 1D MSW-MSL Linearized distribution: ')
+    hist3.Draw()
+    list1DL.append(hist3)
+    canvas.Print(output+"/1DLinearHists/"+name3+".pdf")
+    
+    
+
+## Redraw canvas histogram once again.
+def reDraw(hist,name,canvas):
+    global list2D
+    if not (canvas):
+        canvas = TCanvas(name)
+    canvas.cd(0)
+    hist.SetDirectory(0)
+    hist.SetOption("COLZ")
+    hist.Draw()
+    list2D.append(hist)
+    canvas.Print(output+"/"+name+"_redrawn"+".pdf")
+
+# Function that opens a root file, gets the histogram names, reads them, create a canvas,
+# Either creates a new histogram with new binning, or changes the scales of the plot,
+# based on previous boolean(1 or 0) inputs. Finally saves them to a plots.
+def drawHist(rootfile):
+    #global variables
+    global name
+    global list2D
+    global list1D
+    global list1DL
+
+
+    #Create lists to collect each histogram group
+    list2D  = []
+    list1D  = []
+    list1DL = []
+
+    f = TFile.Open(rootfile,"READ")
+    if not os.path.exists(output):
+        os.makedirs(output)
+
+    # I will create directories for the the 1D Histograms if they don't already exist
+    if not os.path.exists(output+'/1DHists'):
+        os.makedirs(output+'/1DHists')
+    if not os.path.exists(output+'/1DLinearHists'):
+        os.makedirs(output+'/1DLinearHists')
+
+    #This goes over the contents root file (the 2D histogram you read), and reads the histograms and saves it.
+    for key in f.GetListOfKeys():
+        if not (f):
+            f = TFile.Open(rootfile,"READ")
+        name = key.ReadObj().GetName()
+        hist = f.FindObjectAny(name+';1')
+        canvas = TCanvas(name)
+        canvas.cd(0)
+        hist.SetDirectory(0)
+        hist.SetOption("COLZ")
+        hist.Draw()
+        #Open 2D Histogram, write, and close it.
+        print('Histogram Name ...')
+        print(hist)
+        list2D.append(hist)
+        #Print it out 
+        canvas.Print(output+"/"+name+".pdf")
+        #Check for next option
+        check = raw_input("Options: type 'zoom', 'change bin size', or anything else to project and continue: ")
+        #After Drawing the first histogram, you proceed to a while loop that checks continous if the word 'check' is
+        #equal to any of the commands, for which it executes the command and redefines 'check'.
+        while (check == "zoom" or check == "change bin size" ):
+            if(check == "zoom"):
+                drawZoom(hist,name,canvas)
+                check = raw_input("Options: type 'zoom', 'change bin size', or anything else to project and continue: ")
+            elif(check == "change bin size"):
+                hist = changeBins(hist)
+                reDraw(hist,name,canvas)
+                check = raw_input("Options: type 'zoom', 'change bin size', or anything else to project and continue: ")
+        boundaries1D = raw_input("Input your minimum and maximum values for the 1D plots as floats 'min,max' :")
+        try:
+            min,max = two_digit_strings_to_floats(boundaries1D)
+        except:
+            print("You must enter a min and max for the projections, Aborting!")
+            return
+        Projection(hist,name,canvas,min,max)
+        check = raw_input("Options: type anything to continue: ")
+            
+    #Close root file that we were reading from.
+    f.Close()
+    
+    
+    #TFile is a root function that create root files.
+    #This is the file that will store all the 2D Histograms in addition to the zoomed in and rebinned ones.
+    Hists2D = TFile.Open(output+"/plots.root","RECREATE")
+    for i in range(len(list2D)):
+        print(list2D[i])
+        list2D[i].Write()
+    Hists2D.Close()
+
+    #This one store the 1D Histograms, a.k.a the MSW and MSL distributions. 
+    Hists1D = TFile.Open(output+"/1DHists/"+fit_file,"RECREATE")
+    for i in range(len(list1D)):
+        list1D[i].Write()
+    Hists1D.Close()
+
+    
+    LinearHists1D = TFile.Open(output+"/1DLinearHists/"+linear_fit_file,"RECREATE")
+    for i in range(len(list1DL)):
+        list1DL[i].Write()
+    LinearHists1D.Close()
+
+
+## Code Actions.
+## Input filepath and rootfile from bashscript.
+
+#Path of file you want to read
+filepath = raw_input('Enter File Path: ')
+#Name of rootfile you will read.
+rootfile = filepath+'/'+raw_input('Enter File Name: ')
+#The directory for which all the files will go.
+output = raw_input('Enter Output Directory Name:')
+#The file that will store all your MSW, and MSL distributions
+fit_file = raw_input('Enter the name of your 1D MSL/MSW rootfiles with the .root extension: ')
+#The file that will store your linearlized MSL-MSW distributions
+linear_fit_file = raw_input('Enter the name of your linearized 2D to 1D MSL+MSW rootfiles with the .root extension: ')
+
+# This is the one command that runs all the functions defined above.
+drawHist(rootfile)
